@@ -27,7 +27,7 @@ def prepare_from_csv(
     clean_csv: str | Path,
     p: int = 10,
     split_date: str = "2018-01-02",
-    prediction_cols: list[str] = ["log_ret", "sigma20"],
+    prediction_cols: list[str] = ["log_ret", "sigma20", "Volume"]
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, Tuple[np.ndarray, np.ndarray, float, float]]]:
     """
     Load the *clean* CSV, build lag features + volatility column, then
@@ -91,7 +91,7 @@ def prepare_from_csv(
     return X_train, X_test, targets_dict
 
 
-def run_model_single_col(X_tr, X_te, pred_tuple, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1,
+def train_single_col(X_tr, X_te, pred_tuple, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1,
               verbose=False, plot=False, col_name="log_ret"):
     y_tr, y_te, scale_min, scale_max = pred_tuple
     # Run model for each prediction column
@@ -138,37 +138,36 @@ def run_model_single_col(X_tr, X_te, pred_tuple, max_neurons=256, lam_gl1=5e-4, 
         plt.legend()
         plt.show()
 
-    return train_error, test_error
+    return train_error, test_error, model
 
 
-def run_model(clean_csv, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1, prediction_cols=["log_ret", "sigma20"] ,verbose=False, plot=False):
+def train_nets(clean_csv, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1, prediction_cols=["log_ret", "sigma20", "Volume"] ,verbose=False, plot=False):
 
-    X_tr, X_te, target_dict = prepare_from_csv(clean_csv, p=p)
+    X_tr, X_te, target_dict = prepare_from_csv(clean_csv, prediction_cols=prediction_cols, p=p)
 
     # Run model for each prediction column
-    train_error = {}
-    test_error = {}
+    prediction_dict = {}
     for col, pred_tuple in target_dict.items():
-        train_error[col], test_error[col] = run_model_single_col(
+        train_error, test_error, model = train_single_col(
             X_tr, X_te, pred_tuple, max_neurons=max_neurons,
             lam_gl1=lam_gl1, huber_delta=huber_delta,
             verbose=verbose, plot=plot, col_name=col
         )
+        prediction_dict[col] = {
+            "train_error": train_error,
+            "test_error": test_error,
+            "model": model
+        }
 
-    return train_error, test_error
+    return prediction_dict
 
 
 # nika's code modifed to work with my data
 def main() -> None:
     # paths / parameters
     clean_csv   = "sp500_2005_2021_clean.csv"
-    # best_hyperparams, best_test_mse = optimal_hyperparam_sweep(clean_csv)
-    # lam_gl1_opt, huber_delta_opt, max_neurons_opt, p_opt = best_hyperparams
-    # print(f"Best Hyperparameters: {best_hyperparams}") #(0.001, 0.1, 512, 32)
-    # print(f"Best Test MSE: {best_test_mse}")
     lam_gl1_opt, huber_delta_opt, max_neurons_opt, p_opt = (0.001, 0.1, 512, 32)
-    # run the model with optimal hyperparameters
-    train_mse, test_mse = run_model(
+    prediction_dict = train_nets(
         clean_csv,
         p=p_opt,
         max_neurons=max_neurons_opt,
@@ -176,6 +175,10 @@ def main() -> None:
         huber_delta=huber_delta_opt,
         plot=True,
     )
+
+    volume_model = prediction_dict["Volume"]["model"]
+    log_ret_model = prediction_dict["log_ret"]["model"]
+    sigma_model = prediction_dict["sigma20"]["model"]
 
 if __name__ == "__main__":
     main()
