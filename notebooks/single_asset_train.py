@@ -47,23 +47,29 @@ def prepare_from_csv(
     )
 
     train_dict = {}
+
     # Min-max scale
-    def scale_x(x):
-        return float(x.min()), float(x.max()), (x - x.min()) / (x.max() - x.min())
+    def scale_x(x, split_idx=None):
+        if split_idx is None:
+            split_idx = len(x)
+
+        x_min = x.iloc[:split_idx].min()
+        x_max = x.iloc[:split_idx].max()
+        return float(x_min), float(x_max), (x - x_min) / (x_max - x_min)
+
+    # Find the split point in the date-indexed dataframe
+    split_index = df.index.get_loc(pd.to_datetime(split_date))
 
     col_stats = {}
     for col in prediction_cols:
         if col not in df.columns:
             raise ValueError(f"Column '{col}' not found in the DataFrame.")
-        col_min, col_max, df[col] = scale_x(df[col])
+        col_min, col_max, df[col] = scale_x(df[col], split_idx=split_index)
         col_stats[col] = (col_min, col_max)
 
 
     # Subset to just the features we care about
     df = df[prediction_cols].dropna()
-
-    # Find the split point in the date-indexed dataframe
-    split_index = df.index.get_loc(pd.to_datetime(split_date))
 
     # Construct lagged feature/target set
     X = []
