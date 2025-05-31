@@ -1,36 +1,38 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
-
 from utils.data import mse, unscale_log_return
 
-class LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, output_size=1):
-        super(LSTMModel, self).__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, output_size)
+
+class TransformerModel(nn.Module):
+    def __init__(self, input_size, d_model=32, nhead=2, num_layers=1, dim_feedforward=64, dropout=0.1, output_size=1):
+        super(TransformerModel, self).__init__()
+
+        self.input_projection = nn.Linear(input_size, d_model)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        self.output_layer = nn.Linear(d_model, output_size)
 
     def forward(self, x):
-        out, _ = self.lstm(x)
-        out = out[:, -1, :]  # Take the last time step
-        out = self.fc(out)
-        return out
+        x = self.input_projection(x)  # Shape: (batch_size, seq_len, d_model)
+        x = self.transformer_encoder(x)
+        x = x[:, -1, :]  # Use last time step
+        return self.output_layer(x)
 
-def train_lstm(X_train, y_train, X_test, y_test, scale_min, scale_max, epochs=50, lr=0.001, batch_size=32, huber_delta=0.1):
+
+def train_transformer(X_train, y_train, X_test, y_test, scale_min, scale_max, epochs=50, lr=0.001, batch_size=32, huber_delta=0.1):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_size = X_train.shape[2]
-    model = LSTMModel(input_size).to(device)
-    criterion = nn.MSELoss()
+    model = TransformerModel(input_size).to(device)
+
+    # criterion = nn.MSELoss()
     criterion = nn.HuberLoss(delta=huber_delta)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
-    # Ensure targets are (batch_size, 1)
     y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
-    y_test_tensor = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
 
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), y_train_tensor)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_dataset = torch.utils.data.TensorDataset(torch.tensor(X_train, dtype=torch.float32), y_train_tensor)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     model.train()
     for epoch in range(epochs):
@@ -51,7 +53,7 @@ def train_lstm(X_train, y_train, X_test, y_test, scale_min, scale_max, epochs=50
         y_pred_train = model(X_train_tensor).cpu().squeeze().numpy()
         y_pred_test = model(X_test_tensor).cpu().squeeze().numpy()
 
-    # Unscale predictions and targets
+    # Unscale predictions
     y_pred_train_unscaled = unscale_log_return(scale_min, scale_max, y_pred_train)
     y_pred_test_unscaled = unscale_log_return(scale_min, scale_max, y_pred_test)
     y_train_unscaled = unscale_log_return(scale_min, scale_max, y_train)

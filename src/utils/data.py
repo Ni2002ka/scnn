@@ -48,7 +48,7 @@ def prepare_single_asset_from_csv(
 
         x_min = x.iloc[:split_idx].min()
         x_max = x.iloc[:split_idx].max()
-        return float(x_min), float(x_max), (x - x_min) / (x_max - x_min)
+        return float(x_min.iloc[0]), float(x_max.iloc[0]), (x - x_min) / (x_max - x_min)
 
     # Find the split point in the date-indexed dataframe
     split_index = df.index.get_loc(pd.to_datetime(split_date))
@@ -69,7 +69,7 @@ def prepare_single_asset_from_csv(
     target_data = {col: [] for col in prediction_cols}
 
     for i in range(p, len(df)):
-        X.append(df.iloc[i - p:i].values.flatten())
+        X.append(df.iloc[i - p:i].values)
         for col in prediction_cols:
             target_data[col].append(df.iloc[i][col])
 

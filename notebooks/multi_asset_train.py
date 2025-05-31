@@ -1,6 +1,5 @@
 from __future__ import annotations
-
-
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,10 +8,25 @@ from scnn.optimize import optimize
 from scnn.regularizers import NeuronGL1
 
 from utils.data import prepare_from_csv, unscale_log_return, mse
+from non_convex_models.LSTM import train_lstm
+from non_convex_models.transformer import train_transformer
 
 
+def train_single_col(X_tr, X_te, pred_tuple, model_type='scnn', max_neurons=256, lam_gl1=5e-4, huber_delta=0.1,
+                     verbose=False, p=10):
+    y_tr, y_te, scale_min, scale_max = pred_tuple
+    if model_type == 'scnn':
+        X_tr_reshaped = X_tr.reshape(X_tr.shape[0], -1)
+        X_te_reshaped = X_te.reshape(X_te.shape[0], -1)
+        return train_scnn(X_tr_reshaped, X_te_reshaped, pred_tuple, max_neurons=max_neurons, lam_gl1=lam_gl1,
+                          huber_delta=huber_delta, verbose=verbose)
+    elif model_type == 'lstm':
+        return train_lstm(X_tr, y_tr, X_te, y_te, scale_min, scale_max, huber_delta=huber_delta)
+    elif model_type == 'transformer':
+        return train_transformer(X_tr, y_tr, X_te, y_te, scale_min, scale_max, huber_delta=huber_delta)
 
-def train_single_col(X_tr, X_te, pred_tuple, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1,
+
+def train_scnn(X_tr, X_te, pred_tuple, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1,
                      verbose=False):
     y_tr, y_te, scale_min, scale_max = pred_tuple
 
@@ -49,8 +63,8 @@ def train_single_col(X_tr, X_te, pred_tuple, max_neurons=256, lam_gl1=5e-4, hube
     return train_error, test_error, model, (y_tr_unscaled, preds_tr_unscaled), (y_te_unscaled, preds_te_unscaled)
 
 
-def train_nets(ticker_list, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1,
-               prediction_cols=["log_ret", "sigma20", "Volume"], verbose=False, plot=False, asset_correlation=True):
+def train_nets(ticker_list, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1, model_type='scnn',
+               prediction_cols=["log_ret", "sigma20", "Volume"], verbose=False, plot=False, asset_correlation=False):
     train_target_dict = prepare_from_csv(ticker_list, prediction_cols=prediction_cols, p=p, asset_correlation=asset_correlation)
 
     for ticker, train_dict in train_target_dict.items():
@@ -66,14 +80,8 @@ def train_nets(ticker_list, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1
                 axs = np.expand_dims(axs, axis=0)
 
         for i, (col, pred_tuple) in enumerate(targets.items()):
-            train_error, test_error, model, (y_tr, preds_tr), (y_te, preds_te) = train_single_col(
-                X_tr, X_te, pred_tuple,
-                max_neurons=max_neurons,
-                lam_gl1=lam_gl1,
-                huber_delta=huber_delta,
-                verbose=verbose
-            )
 
+            start_time = time.time()
             if asset_correlation:
                 X_tr_all = train_dict["all_X_train"]
                 X_te_all = train_dict["all_X_test"]
@@ -83,10 +91,25 @@ def train_nets(ticker_list, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1
                     X_tr_all, X_te_all, pred_tuple,
                     max_neurons=max_neurons,
                     lam_gl1=lam_gl1,
+                    p=p,
+                    model_type=model_type,
+                    huber_delta=huber_delta,
+                    verbose=verbose
+                )
+            else:
+                train_error, test_error, model, (y_tr, preds_tr), (y_te, preds_te) = train_single_col(
+                    X_tr, X_te, pred_tuple,
+                    max_neurons=max_neurons,
+                    p=p,
+                    model_type=model_type,
+                    lam_gl1=lam_gl1,
                     huber_delta=huber_delta,
                     verbose=verbose
                 )
 
+            elapsed_time = time.time() - start_time
+            if verbose:
+                print(f"Training {col} for {ticker} took {elapsed_time:.2f} seconds.")
 
             if plot:
                 axs[i, 0].plot(y_tr, label='True', linewidth=1)
@@ -110,18 +133,21 @@ def train_nets(ticker_list, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1
             plt.show()
 
 
-# nika's code modifed to work with my data
 def main() -> None:
     # paths / parameters
     ticker_list = ["AAPL", "MSFT", "GOOG", "sp500"]
     lam_gl1_opt, huber_delta_opt, max_neurons_opt, p_opt = (0.001, 0.1, 512, 32)
-    prediction_dict = train_nets(
+    train_nets(
         ticker_list,
         p=p_opt,
+        # model_type='transformer',
+        # model_type='scnn',
+        model_type='lstm',
         max_neurons=max_neurons_opt,
         lam_gl1=lam_gl1_opt,
         huber_delta=huber_delta_opt,
         plot=True,
+        verbose=True
     )
 
 
