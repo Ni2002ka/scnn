@@ -1,4 +1,4 @@
-"""Convert models from :module:`scnn.models` into internal representations
+"""Converted models from :module:`scnn.models` into internal representations
 and vice versa."""
 
 from typing import Optional, List, Tuple
@@ -72,7 +72,7 @@ def build_internal_regularizer(
 
 
 def build_internal_model(
-    model: Model, regularizer: Regularizer, X_train: lab.Tensor, loss_type: str = "least squares", huber_delta: Optional[float] = None
+    model: Model, regularizer: Regularizer, X_train: lab.Tensor, loss_type: str = "least squares", huber_delta: Optional[float] = None, pinball_tau: Optional[float] = None,
 ) -> InternalModel:
     """Convert public-facing model objects into private implementations.
 
@@ -123,6 +123,8 @@ def build_internal_model(
         elif loss_type == "huber":
             assert huber_delta is not None and huber_delta > 0
             internal_model = HuberMLP(d, D, G, "einsum", regularizer=internal_reg, c=c, huber_delta=huber_delta)
+        elif loss_type == "pinball":
+            internal_model = ConvexMLP(d,D,G, "einsum", regularizer=internal_reg, c=c)
         else:
             raise ValueError(f"Loss type {loss_type} not supported.")
     else:

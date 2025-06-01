@@ -6,9 +6,16 @@ TODO:
 from typing import Dict, Any, List, Tuple, Union, Optional
 
 import lab
+import numpy as np
 
 # loss functions
 
+def pinball_loss(pred, target, tau: float):
+    residual = target - pred
+    loss_vec = np.where(residual >= 0,
+                        tau * residual,
+                        (tau - 1.0) * residual)
+    return loss_vec.sum()
 
 def huber_loss(preds: lab.Tensor, y: lab.Tensor, delta: float) -> float:
     """Compute the Huber loss,
