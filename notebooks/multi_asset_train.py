@@ -91,7 +91,7 @@ def train_nets(ticker_list, p=10, max_neurons=256, lam_gl1=5e-4, huber_delta=0.1
 
         for i, (col, pred_tuple) in enumerate(targets.items()):
             if col == "log_ret":
-                lam_gl1, huber_delta = (1e-3, 0.4)
+                lam_gl1, huber_delta = (1e-3, 1)
             elif col == "Volume":
                 lam_gl1, huber_delta = (1e-8, 0.05)
             elif col == "sigma20":
